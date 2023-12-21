@@ -1,0 +1,90 @@
+pipeline {
+    agent any
+    
+    environment {
+        MAVEN_HOME = tool name: 'maven', type: 'maven'
+        TOMCAT_URL = 'http://18.219.111.187:8080/'
+    }
+
+    stages {
+        stage('1. clonecode') {
+            steps {
+                // Clone the Git repository
+                git "https://github.com/kola0031/maven-web-application"
+            }
+        }
+
+        stage('2. mavenBuild') {
+            steps {
+                // Build the Maven project
+                sh "${MAVEN_HOME}/bin/mvn package"
+            }
+        }
+
+        stage('3. codeQualityAnalysis') {
+            steps {
+                // Run SonarQube analysis
+                sh "${MAVEN_HOME}/bin/mvn sonar:sonar"
+            }
+        }
+
+        stage('4. uploadArtifacts') { 
+            steps {
+                // Upload artifacts to a repository or deploy to a remote server
+                sh "${MAVEN_HOME}/bin/mvn deploy"
+            }
+        }
+
+        stage('5. deploy2UAT') {
+            steps {
+                // Deploy to UAT using the deploy to container plugin
+                deploy adapters: [tomcat9(credentialsId: 'newtomcat', path: '', url: TOMCAT_URL)], contextPath: null, war: 'target/*.war'
+            }
+        }
+
+        stage('6. ManualApproval') {
+            steps {
+                echo 'Please review & approve'
+                timeout(time: 5, unit: 'MINUTES') {
+                    input message: 'Application ready for deployment. Review and approve.'
+                }
+            }
+        }
+
+        stage('7. deploy2prod') {
+            steps {
+                // Deploy to production using the deploy to container plugin
+                deploy adapters: [tomcat9(credentialsId: 'newtomcat', path: '', url: TOMCAT_URL)], contextPath: null, war: 'target/*.war'
+            }
+        }
+
+        stage('8. apm') {
+            steps {
+                echo 'Monitoring, observation, and alerting'
+                echo 'Application performance monitoring in progress'
+            }
+        }
+
+        stage('9. notification') {
+            steps {
+                echo 'Create email notification to resolve any issues that may arise'
+                emailext body: '''
+                    The build and deployment status for tesla-webapp.
+
+                    Regards,
+                    Landmark Technologies
+                ''', recipientProviders: [developers(), upstreamDevelopers(), buildUser()], subject: 'Job Status', to: 'mylandmarktech@gmail.com'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline succeeded! Perform additional success actions if needed.'
+        }
+
+        failure {
+            echo 'Pipeline failed! Perform additional failure actions if needed.'
+        }
+    }
+}
